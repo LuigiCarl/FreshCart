@@ -4,16 +4,20 @@ namespace App\Actions;
 
 use App\Enums\OrderStatus;
 use App\Jobs\ProcessOrder;
+use App\Jobs\SendLowStockAlert;
 use App\Models\Order;
 use App\Models\Product;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class PlaceOrderAction
 {
+    private const LOW_STOCK_THRESHOLD = 5;
+
     /**
      * @param  array{customer_name: string, customer_email: string, items: array<int, array{product_id: int, quantity: int}>}  $data
      */
@@ -108,7 +112,31 @@ class PlaceOrderAction
                 }
 
                 foreach ($quantities as $productId => $quantity) {
-                    $products->get($productId)->decrement('stock', $quantity);
+                    $product = $products->get($productId);
+                    $stockBefore = (int) $product->stock;
+                    $remainingStock = $stockBefore - $quantity;
+
+                    $product->decrement('stock', $quantity);
+
+                    if ($stockBefore >= self::LOW_STOCK_THRESHOLD && $remainingStock < self::LOW_STOCK_THRESHOLD) {
+                        $adminEmail = config('services.low_stock_alert_email');
+
+                        if (! is_string($adminEmail) || trim($adminEmail) === '') {
+                            Log::warning('Low-stock alert was not queued because LOW_STOCK_ALERT_EMAIL is not configured.', [
+                                'product_id' => $product->id,
+                                'remaining_stock' => $remainingStock,
+                            ]);
+
+                            continue;
+                        }
+
+                        SendLowStockAlert::dispatch(
+                            $product->id,
+                            $product->name,
+                            $remainingStock,
+                            trim($adminEmail),
+                        )->afterCommit();
+                    }
                 }
 
                 $order->update(['total' => $this->fromCents($totalCents)]);
