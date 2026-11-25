@@ -135,18 +135,34 @@ docs: add project setup instructions
 
 ## **5. Optional requirements – separate branches**
 
-Huwag muna natin itong unahin. Complete muna ang core assessment.
+Optional lamang ang mga ito at hindi sila kapalit ng core requirements. Simulan lang kapag merged at stable na ang core API. Magtrabaho sa **isang optional feature branch sa bawat pagkakataon**, tapusin at i-merge muna ang PR nito sa `main`, saka kumuha ng bagong updated `main` para sa susunod.
 
-| Priority   | Branch                          | Feature                                          |
-| ---------- | ------------------------------- | ------------------------------------------------ |
-| Optional 1 | `feature/idempotency`           | Prevent duplicate checkout using Idempotency-Key |
-| Optional 2 | `feature/sanctum-auth`          | Authentication and customer order ownership      |
-| Optional 3 | `feature/low-stock-alert`       | Admin low-stock email                            |
-| Optional 4 | `feature/pending-order-cleanup` | Scheduled cancellation after 30 minutes          |
-| Optional 5 | `feature/order-rate-limiting`   | 10 requests/minute                               |
-| Optional 6 | `chore/docker-setup`            | Docker Compose with MySQL and queue worker       |
+| Order | Branch | Scope and acceptance checks |
+| ----- | ------ | --------------------------- |
+| 01 | `feature/idempotency` | Tanggapin ang `Idempotency-Key` sa checkout at i-save ito nang unique. Ang retry na may parehong key at payload ay dapat magbalik ng parehong order nang walang panibagong stock deduction; ang parehong key na may ibang payload ay dapat magbalik ng `409`. Isama ang test para sa concurrent duplicate requests. |
+| 02 | `feature/order-rate-limiting` | Limitahan ang `POST /api/v1/orders` sa 10 requests kada minuto bawat IP. Ibalik ang JSON `429` kapag lumampas at subukan ang limit boundary. |
+| 03 | `feature/sanctum-auth` | Idagdag ang Sanctum token authentication sa order endpoints at tiyaking sariling orders lang ang nakikita o naa-access ng customer; manatiling public ang product listing. Idokumento at subukan ang token issuance/registration assumption bago i-merge. |
+| 04 | `feature/low-stock-alert` | Mag-queue ng admin alert kapag bumaba sa mas mababa sa 5 ang stock. Magpadala lamang kapag tumawid ang stock mula 5 o higit pa pababa sa 4 o mas mababa para maiwasan ang alert sa bawat susunod na order. Basahin ang admin email mula sa environment configuration at huwag mag-commit ng credentials. |
+| 05 | `feature/pending-order-cleanup` | Magdagdag ng scheduled command para kanselahin ang pending orders na mahigit 30 minuto ang edad. Gamitin ang atomic cancellation/stock-restoration logic at tiyaking hindi mare-restore nang dalawang beses o makakansela ang order na nagsimula nang iproseso. |
+| 06 | `chore/docker-setup` | Magdagdag ng Docker Compose para sa Laravel app, MySQL 8, at queue worker. Tiyaking naghihintay ang app/worker sa healthy database at nakadokumento ang setup, migrations, at test commands. |
 
-My suggestion: prioritize idempotency and rate limiting after all core requirements pass.
+### Optional feature branch workflow
+
+1. Tiyaking merged na ang naunang PR, pagkatapos ay magsimula sa updated `main`:
+
+   ```powershell
+   git switch main
+   git pull --ff-only origin main
+   git switch -c feature/idempotency
+   ```
+
+2. Ipatupad lamang ang scope ng isang optional feature. Isama ang focused tests at direktang kaugnay na documentation.
+3. Patakbuhin ang focused tests at buong test suite; tiyaking walang regression sa checkout, stock, queue, o API error responses.
+4. I-review at i-stage lamang ang kaugnay na files, gumawa ng malinaw na commit, at i-push ang branch.
+5. Gumawa ng PR papuntang `main`, ilagay ang scope, assumptions, tests, at anumang database/configuration steps, at i-merge lamang pagkatapos pumasa ang review/checks.
+6. Ulitin mula sa updated `main` para sa susunod na optional feature.
+
+Maaaring unahin ang idempotency at rate limiting dahil maliit ang scope at independent ang mga ito. Nakadepende ang cleanup sa cancellation logic; gawin ang Docker setup sa huli para patatagin muna ang application behavior. Puwedeng huminto pagkatapos ng alinmang merged optional PR—hindi kailangang gawin lahat ng bonus para makumpleto ang assessment.
 
 ## **6. Definition of Done**
 
