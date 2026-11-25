@@ -17,7 +17,7 @@ class PlaceOrderAction
     /**
      * @param  array{customer_name: string, customer_email: string, items: array<int, array{product_id: int, quantity: int}>}  $data
      */
-    public function execute(array $data, ?string $idempotencyKey = null): Order
+    public function execute(array $data, int $userId, ?string $idempotencyKey = null): Order
     {
         $requestHash = $idempotencyKey === null
             ? null
@@ -25,6 +25,7 @@ class PlaceOrderAction
 
         if ($idempotencyKey !== null) {
             $existingOrder = Order::query()
+                ->where('user_id', $userId)
                 ->where('idempotency_key', $idempotencyKey)
                 ->first();
 
@@ -34,9 +35,10 @@ class PlaceOrderAction
         }
 
         try {
-            $order = DB::transaction(function () use ($data, $idempotencyKey, $requestHash): Order {
+            $order = DB::transaction(function () use ($data, $userId, $idempotencyKey, $requestHash): Order {
                 if ($idempotencyKey !== null) {
                     $existingOrder = Order::query()
+                        ->where('user_id', $userId)
                         ->where('idempotency_key', $idempotencyKey)
                         ->lockForUpdate()
                         ->first();
@@ -77,6 +79,7 @@ class PlaceOrderAction
                 }
 
                 $order = Order::query()->create([
+                    'user_id' => $userId,
                     'order_number' => sprintf('FC-%s-%s', now()->format('Ymd'), Str::upper((string) Str::ulid())),
                     'customer_name' => $data['customer_name'],
                     'customer_email' => $data['customer_email'],
@@ -120,6 +123,7 @@ class PlaceOrderAction
             }
 
             $existingOrder = Order::query()
+                ->where('user_id', $userId)
                 ->where('idempotency_key', $idempotencyKey)
                 ->first();
 

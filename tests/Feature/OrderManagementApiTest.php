@@ -5,12 +5,24 @@ namespace Tests\Feature;
 use App\Enums\OrderStatus;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class OrderManagementApiTest extends TestCase
 {
     use RefreshDatabase;
+
+    private User $user;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->user = User::factory()->create();
+        Sanctum::actingAs($this->user);
+    }
 
     public function test_orders_can_be_listed_with_status_and_email_filters(): void
     {
@@ -105,6 +117,7 @@ class OrderManagementApiTest extends TestCase
     private function createOrder(OrderStatus $status, string $email): Order
     {
         return Order::query()->create([
+            'user_id' => $this->user->id,
             'order_number' => 'FC-'.fake()->unique()->numerify('########').'-'.fake()->unique()->bothify('????'),
             'customer_name' => 'Test Customer',
             'customer_email' => $email,

@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,7 +16,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        //
+        $middleware->redirectGuestsTo(
+            fn (Request $request): ?string => $request->is('api/*') ? null : route('login'),
+        );
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->shouldRenderJsonWhen(
@@ -25,6 +28,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (Throwable $exception, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
+            }
+
+            if ($exception instanceof AuthenticationException) {
+                return response()->json([
+                    'message' => 'Unauthenticated.',
+                    'errors' => null,
+                ], 401);
             }
 
             if ($exception instanceof ValidationException) {
@@ -43,6 +53,13 @@ return Application::configure(basePath: dirname(__DIR__))
                     'message' => 'Not found.',
                     'errors' => null,
                 ], 404);
+            }
+
+            if ($status === 401) {
+                return response()->json([
+                    'message' => 'Unauthenticated.',
+                    'errors' => null,
+                ], 401);
             }
 
             if ($status === 409) {

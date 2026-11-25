@@ -65,14 +65,21 @@ All endpoints are under `/api/v1` and return JSON.
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
 | `GET` | `/api/v1/products` | Paginated product list (15 per page) |
-| `POST` | `/api/v1/orders` | Place an order |
-| `GET` | `/api/v1/orders` | Paginated order list; optional `status` and `customer_email` filters |
-| `GET` | `/api/v1/orders/{order_number}` | Order details with item and product names |
-| `POST` | `/api/v1/orders/{order_number}/cancel` | Cancel a pending order and restore its stock |
+| `POST` | `/api/v1/auth/register` | Register a customer and issue a bearer token |
+| `POST` | `/api/v1/auth/login` | Log in and issue a bearer token |
+| `POST` | `/api/v1/auth/logout` | Revoke the current bearer token |
+| `POST` | `/api/v1/orders` | Place an order (bearer token required) |
+| `GET` | `/api/v1/orders` | List your orders; optional `status` and `customer_email` filters (bearer token required) |
+| `GET` | `/api/v1/orders/{order_number}` | View your order details (bearer token required) |
+| `POST` | `/api/v1/orders/{order_number}/cancel` | Cancel your pending order (bearer token required) |
+
+### Customer authentication
+
+Product listing is public. Order endpoints require a Sanctum personal access token. Register with a name, email, password, and password confirmation, or log in with an existing account; both return a bearer token. Send it as `Authorization: Bearer <token>`. Logout revokes the current token. Customers can list, view, and cancel only their own orders. Legacy guest orders without an owner are not exposed through authenticated order endpoints.
 
 ### Idempotent checkout
 
-Optionally send an `Idempotency-Key` header with `POST /api/v1/orders`. Retrying the same request with the same key returns the existing order without decrementing stock or dispatching another processing job. Reusing the key with a different payload returns `409 Conflict`.
+Optionally send an `Idempotency-Key` header with `POST /api/v1/orders`. Keys are scoped to the authenticated customer. Retrying the same request with the same key returns the existing order without decrementing stock or dispatching another processing job. Reusing the key with a different payload returns `409 Conflict`.
 
 ### Checkout rate limit
 
@@ -86,23 +93,31 @@ List products:
 curl.exe -H "Accept: application/json" "http://127.0.0.1:8000/api/v1/products"
 ```
 
+Register an account (replace the example email and password):
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/api/v1/auth/register" -H "Accept: application/json" -H "Content-Type: application/json" --data-raw '{"name":"Sam Shopper","email":"sam@example.com","password":"ChangeThisPassword123!","password_confirmation":"ChangeThisPassword123!"}'
+```
+
+Use the returned token as `<token>` in the `Authorization` header for order endpoints:
+
 Place an order using a `product_id` from the product list:
 
 ```powershell
-curl.exe -X POST "http://127.0.0.1:8000/api/v1/orders" -H "Accept: application/json" -H "Content-Type: application/json" -H "Idempotency-Key: checkout-sam-001" --data-raw '{"customer_name":"Sam Shopper","customer_email":"sam@example.com","items":[{"product_id":1,"quantity":2}]}'
+curl.exe -X POST "http://127.0.0.1:8000/api/v1/orders" -H "Accept: application/json" -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -H "Idempotency-Key: checkout-sam-001" --data-raw '{"customer_name":"Sam Shopper","customer_email":"sam@example.com","items":[{"product_id":1,"quantity":2}]}'
 ```
 
 List pending orders for an email address:
 
 ```powershell
-curl.exe -H "Accept: application/json" "http://127.0.0.1:8000/api/v1/orders?status=pending&customer_email=sam%40example.com"
+curl.exe -H "Accept: application/json" -H "Authorization: Bearer <token>" "http://127.0.0.1:8000/api/v1/orders?status=pending&customer_email=sam%40example.com"
 ```
 
 Show an order or cancel it by replacing `{order_number}` with the returned order number:
 
 ```powershell
-curl.exe -H "Accept: application/json" "http://127.0.0.1:8000/api/v1/orders/{order_number}"
-curl.exe -X POST -H "Accept: application/json" "http://127.0.0.1:8000/api/v1/orders/{order_number}/cancel"
+curl.exe -H "Accept: application/json" -H "Authorization: Bearer <token>" "http://127.0.0.1:8000/api/v1/orders/{order_number}"
+curl.exe -X POST -H "Accept: application/json" -H "Authorization: Bearer <token>" "http://127.0.0.1:8000/api/v1/orders/{order_number}/cancel"
 ```
 
 ## Tests
@@ -117,7 +132,8 @@ Tests use an in-memory SQLite database. This keeps tests isolated from the confi
 
 ## Assumptions and behavior
 
-- Checkout is unauthenticated; authentication is an optional assessment bonus.
+- Product listing and account registration/login are public; every order endpoint requires a Sanctum bearer token.
+- Orders are tied to the authenticated user and cannot be viewed or changed by other users.
 - Product prices come from the database, never from client-supplied prices.
 - Stock is locked and checked in a transaction; insufficient stock rolls back the entire order.
 - Orders are created as `pending`. Invoice and email work is queued after checkout commits.

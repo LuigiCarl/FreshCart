@@ -23,6 +23,7 @@ class OrderController
         ]);
 
         $orders = Order::query()
+            ->where('user_id', $request->user()->getAuthIdentifier())
             ->when(
                 isset($filters['status']),
                 fn ($query) => $query->where('status', $filters['status']),
@@ -43,14 +44,15 @@ class OrderController
         $idempotencyKey = $data['idempotency_key'] ?? null;
         unset($data['idempotency_key']);
 
-        $order = $placeOrder->execute($data, $idempotencyKey);
+        $order = $placeOrder->execute($data, (int) $request->user()->getAuthIdentifier(), $idempotencyKey);
 
         return OrderResource::make($order)->response()->setStatusCode(201);
     }
 
-    public function show(string $orderNumber): OrderResource
+    public function show(Request $request, string $orderNumber): OrderResource
     {
         $order = Order::query()
+            ->where('user_id', $request->user()->getAuthIdentifier())
             ->with('items.product')
             ->where('order_number', $orderNumber)
             ->firstOrFail();
@@ -58,9 +60,9 @@ class OrderController
         return OrderResource::make($order);
     }
 
-    public function cancel(string $orderNumber, CancelOrderAction $cancelOrder): JsonResponse
+    public function cancel(Request $request, string $orderNumber, CancelOrderAction $cancelOrder): JsonResponse
     {
-        $order = $cancelOrder->execute($orderNumber);
+        $order = $cancelOrder->execute($orderNumber, (int) $request->user()->getAuthIdentifier());
 
         return OrderResource::make($order)->response();
     }
