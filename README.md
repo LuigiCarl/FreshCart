@@ -7,6 +7,7 @@ A Laravel 12 API for placing and tracking grocery orders. Checkout reserves stoc
 - PHP 8.2 or newer with `pdo_mysql`
 - Composer
 - MySQL 8
+- Docker Desktop with Docker Compose v2 (for the containerized setup)
 
 ## Setup
 
@@ -38,6 +39,46 @@ A Laravel 12 API for placing and tracking grocery orders. Checkout reserves stoc
    ```
 
 The API is available at `http://127.0.0.1:8000`. The example environment uses the database queue and the log mailer; no external mail server is required.
+
+## Docker setup
+
+This is an alternative to installing PHP and MySQL directly. It requires Docker Desktop with Docker Compose v2.
+
+1. Copy the example environment file and generate an application key:
+
+   ```powershell
+   Copy-Item .env.example .env
+   docker compose build
+   docker compose run --rm --no-deps app php artisan key:generate
+   ```
+
+2. Start MySQL and wait for its health check:
+
+   ```powershell
+   docker compose up -d --wait mysql
+   ```
+
+3. Run migrations and seed the sample user and products:
+
+   ```powershell
+   docker compose run --rm --no-deps app php artisan migrate --seed
+   ```
+
+4. Start the Laravel API, queue worker, and scheduler:
+
+   ```powershell
+   docker compose up -d --wait
+   ```
+
+The API is available at `http://localhost:8000`. The MySQL container is available to host tools on port `3307` by default, avoiding a conflict with a locally installed MySQL server. The Compose database uses development-only credentials (`freshcart` / `freshcart`); set `FRESHCART_DB_PASSWORD` and `MYSQL_ROOT_PASSWORD` before starting the stack to override them.
+
+Run the test suite inside the app container against in-memory SQLite with:
+
+```powershell
+docker compose exec -e APP_ENV=testing -e DB_CONNECTION=sqlite -e DB_DATABASE=:memory: -e QUEUE_CONNECTION=sync app php artisan test
+```
+
+Stop the services with `docker compose down`; the named MySQL volume is retained.
 
 ## Queue worker
 
