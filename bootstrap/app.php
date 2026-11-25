@@ -45,6 +45,13 @@ return Application::configure(basePath: dirname(__DIR__))
                 ], 404);
             }
 
+            if ($status === 409) {
+                return response()->json([
+                    'message' => $exception->getMessage(),
+                    'errors' => ['idempotency_key' => [$exception->getMessage()]],
+                ], 409);
+            }
+
             if ($status === 500) {
                 return response()->json([
                     'message' => 'Internal server error.',

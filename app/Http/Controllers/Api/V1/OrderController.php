@@ -39,7 +39,11 @@ class OrderController
 
     public function store(PlaceOrderRequest $request, PlaceOrderAction $placeOrder): JsonResponse
     {
-        $order = $placeOrder->execute($request->validated());
+        $data = $request->validated();
+        $idempotencyKey = $data['idempotency_key'] ?? null;
+        unset($data['idempotency_key']);
+
+        $order = $placeOrder->execute($data, $idempotencyKey);
 
         return OrderResource::make($order)->response()->setStatusCode(201);
     }
