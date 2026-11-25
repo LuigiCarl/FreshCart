@@ -4,7 +4,7 @@ A Laravel 12 API for placing and tracking grocery orders. Checkout reserves stoc
 
 ## Requirements
 
-- PHP 8.2 or newer with `pdo_mysql`
+- PHP 8.4 or newer with `pdo_mysql` (matches `composer.lock`, `Dockerfile`, and CI)
 - Composer
 - MySQL 8
 - Docker Desktop with Docker Compose v2 (for the containerized setup)
@@ -135,6 +135,13 @@ Optionally send an `Idempotency-Key` header with `POST /api/v1/orders`. Keys are
 ### Checkout rate limit
 
 `POST /api/v1/orders` accepts up to 10 requests per minute per IP address. Requests over the limit receive a JSON `429 Too Many Requests` response.
+
+### Postman collection
+
+Import both files into a Postman workspace to test all endpoints with automatic `token` and `order_number` capture:
+
+- Collection: `postman/collections/FreshCart-Orders-API.postman_collection.json`
+- Environment: `postman/environments/FreshCart-Local.postman_environment.json`
 
 ### cURL examples (PowerShell)
 
