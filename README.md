@@ -1,66 +1,121 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# FreshCart Orders API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A Laravel 12 API for placing and tracking grocery orders. Checkout reserves stock in a database transaction; invoice generation and confirmation email are handled by queued jobs.
 
-## About Laravel
+## Requirements
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.2 or newer with `pdo_mysql`
+- Composer
+- MySQL 8
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Setup
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+1. Install PHP dependencies:
 
-## Learning Laravel
+   ```powershell
+   composer install
+   ```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+2. Copy the example environment file and generate an application key:
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+   ```powershell
+   Copy-Item .env.example .env
+   php artisan key:generate
+   ```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+3. Create a MySQL database named `freshcart`, then update `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` in `.env` if needed.
 
-## Laravel Sponsors
+4. Run migrations and seed the sample user and products:
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+   ```powershell
+   php artisan migrate --seed
+   ```
 
-### Premium Partners
+5. Start the API:
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+   ```powershell
+   php artisan serve
+   ```
 
-## Contributing
+The API is available at `http://127.0.0.1:8000`. The example environment uses the database queue and the log mailer; no external mail server is required.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Queue worker
 
-## Code of Conduct
+Run a worker in a separate terminal to process invoices and confirmation emails:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```powershell
+php artisan queue:work database --tries=3
+```
 
-## Security Vulnerabilities
+Inspect or retry jobs that exhausted their attempts:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```powershell
+php artisan queue:failed
+php artisan queue:retry all
+```
 
-## License
+Order-processing failures set the order status to `failed` and record a reason. Email delivery is a separate queued job; if it fails, Laravel records it as a failed job while the already-processed order remains `completed`.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Invoices are written to `storage/app/invoices`.
+
+## API endpoints
+
+All endpoints are under `/api/v1` and return JSON.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/v1/products` | Paginated product list (15 per page) |
+| `POST` | `/api/v1/orders` | Place an order |
+| `GET` | `/api/v1/orders` | Paginated order list; optional `status` and `customer_email` filters |
+| `GET` | `/api/v1/orders/{order_number}` | Order details with item and product names |
+| `POST` | `/api/v1/orders/{order_number}/cancel` | Cancel a pending order and restore its stock |
+
+### cURL examples (PowerShell)
+
+List products:
+
+```powershell
+curl.exe -H "Accept: application/json" "http://127.0.0.1:8000/api/v1/products"
+```
+
+Place an order using a `product_id` from the product list:
+
+```powershell
+curl.exe -X POST "http://127.0.0.1:8000/api/v1/orders" -H "Accept: application/json" -H "Content-Type: application/json" --data-raw '{"customer_name":"Sam Shopper","customer_email":"sam@example.com","items":[{"product_id":1,"quantity":2}]}'
+```
+
+List pending orders for an email address:
+
+```powershell
+curl.exe -H "Accept: application/json" "http://127.0.0.1:8000/api/v1/orders?status=pending&customer_email=sam%40example.com"
+```
+
+Show an order or cancel it by replacing `{order_number}` with the returned order number:
+
+```powershell
+curl.exe -H "Accept: application/json" "http://127.0.0.1:8000/api/v1/orders/{order_number}"
+curl.exe -X POST -H "Accept: application/json" "http://127.0.0.1:8000/api/v1/orders/{order_number}/cancel"
+```
+
+## Tests
+
+Run the test suite with:
+
+```powershell
+php artisan test
+```
+
+Tests use an in-memory SQLite database. This keeps tests isolated from the configured MySQL database, but SQLite does not verify MySQL row-lock behavior under concurrent checkouts. Run concurrency checks against MySQL 8 before relying on them in production.
+
+## Assumptions and behavior
+
+- Checkout is unauthenticated; authentication is an optional assessment bonus.
+- Product prices come from the database, never from client-supplied prices.
+- Stock is locked and checked in a transaction; insufficient stock rolls back the entire order.
+- Orders are created as `pending`. Invoice and email work is queued after checkout commits.
+- Only `pending` orders can be cancelled. Cancellation and stock restoration happen atomically.
+- API validation, not-found, and server errors use JSON responses with `message` and `errors` fields.
+
+## AI disclosure
+
+AI assistance was used for planning, implementation, and test design. The resulting changes were reviewed and tested during development.
