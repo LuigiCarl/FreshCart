@@ -70,6 +70,10 @@ All endpoints are under `/api/v1` and return JSON.
 | `GET` | `/api/v1/orders/{order_number}` | Order details with item and product names |
 | `POST` | `/api/v1/orders/{order_number}/cancel` | Cancel a pending order and restore its stock |
 
+### Idempotent checkout
+
+Optionally send an `Idempotency-Key` header with `POST /api/v1/orders`. Retrying the same request with the same key returns the existing order without decrementing stock or dispatching another processing job. Reusing the key with a different payload returns `409 Conflict`.
+
 ### cURL examples (PowerShell)
 
 List products:
@@ -81,7 +85,7 @@ curl.exe -H "Accept: application/json" "http://127.0.0.1:8000/api/v1/products"
 Place an order using a `product_id` from the product list:
 
 ```powershell
-curl.exe -X POST "http://127.0.0.1:8000/api/v1/orders" -H "Accept: application/json" -H "Content-Type: application/json" --data-raw '{"customer_name":"Sam Shopper","customer_email":"sam@example.com","items":[{"product_id":1,"quantity":2}]}'
+curl.exe -X POST "http://127.0.0.1:8000/api/v1/orders" -H "Accept: application/json" -H "Content-Type: application/json" -H "Idempotency-Key: checkout-sam-001" --data-raw '{"customer_name":"Sam Shopper","customer_email":"sam@example.com","items":[{"product_id":1,"quantity":2}]}'
 ```
 
 List pending orders for an email address:

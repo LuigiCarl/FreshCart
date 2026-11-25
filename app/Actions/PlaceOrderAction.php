@@ -6,84 +6,146 @@ use App\Enums\OrderStatus;
 use App\Jobs\ProcessOrder;
 use App\Models\Order;
 use App\Models\Product;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class PlaceOrderAction
 {
     /**
      * @param  array{customer_name: string, customer_email: string, items: array<int, array{product_id: int, quantity: int}>}  $data
      */
-    public function execute(array $data): Order
+    public function execute(array $data, ?string $idempotencyKey = null): Order
     {
-        $order = DB::transaction(function () use ($data): Order {
-            $quantities = [];
+        $requestHash = $idempotencyKey === null
+            ? null
+            : hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
 
-            foreach ($data['items'] as $item) {
-                $productId = (int) $item['product_id'];
-                $quantities[$productId] = ($quantities[$productId] ?? 0) + (int) $item['quantity'];
+        if ($idempotencyKey !== null) {
+            $existingOrder = Order::query()
+                ->where('idempotency_key', $idempotencyKey)
+                ->first();
+
+            if ($existingOrder !== null) {
+                return $this->resolveIdempotentOrder($existingOrder, $requestHash);
             }
+        }
 
-            $products = Product::query()
-                ->whereKey(array_keys($quantities))
-                ->orderBy('id')
-                ->lockForUpdate()
-                ->get()
-                ->keyBy('id');
+        try {
+            $order = DB::transaction(function () use ($data, $idempotencyKey, $requestHash): Order {
+                if ($idempotencyKey !== null) {
+                    $existingOrder = Order::query()
+                        ->where('idempotency_key', $idempotencyKey)
+                        ->lockForUpdate()
+                        ->first();
 
-            foreach ($quantities as $productId => $quantity) {
-                $product = $products->get($productId);
-
-                if ($product === null) {
-                    throw ValidationException::withMessages([
-                        'items' => "Product {$productId} is no longer available.",
-                    ]);
+                    if ($existingOrder !== null) {
+                        return $this->resolveIdempotentOrder($existingOrder, $requestHash);
+                    }
                 }
 
-                if ($product->stock < $quantity) {
-                    throw ValidationException::withMessages([
-                        'items' => "Insufficient stock for {$product->name}. Available: {$product->stock}; requested: {$quantity}.",
-                    ]);
+                $quantities = [];
+
+                foreach ($data['items'] as $item) {
+                    $productId = (int) $item['product_id'];
+                    $quantities[$productId] = ($quantities[$productId] ?? 0) + (int) $item['quantity'];
                 }
-            }
 
-            $order = Order::query()->create([
-                'order_number' => sprintf('FC-%s-%s', now()->format('Ymd'), Str::upper((string) Str::ulid())),
-                'customer_name' => $data['customer_name'],
-                'customer_email' => $data['customer_email'],
-                'status' => OrderStatus::Pending,
-                'total' => '0.00',
-            ]);
+                $products = Product::query()
+                    ->whereKey(array_keys($quantities))
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
 
-            $totalCents = 0;
+                foreach ($quantities as $productId => $quantity) {
+                    $product = $products->get($productId);
 
-            foreach ($data['items'] as $item) {
-                $product = $products->get((int) $item['product_id']);
-                $quantity = (int) $item['quantity'];
-                $unitPrice = (string) $product->price;
-                $subtotalCents = $this->toCents($unitPrice) * $quantity;
+                    if ($product === null) {
+                        throw ValidationException::withMessages([
+                            'items' => "Product {$productId} is no longer available.",
+                        ]);
+                    }
 
-                $order->items()->create([
-                    'product_id' => $product->id,
-                    'quantity' => $quantity,
-                    'unit_price' => $unitPrice,
-                    'subtotal' => $this->fromCents($subtotalCents),
+                    if ($product->stock < $quantity) {
+                        throw ValidationException::withMessages([
+                            'items' => "Insufficient stock for {$product->name}. Available: {$product->stock}; requested: {$quantity}.",
+                        ]);
+                    }
+                }
+
+                $order = Order::query()->create([
+                    'order_number' => sprintf('FC-%s-%s', now()->format('Ymd'), Str::upper((string) Str::ulid())),
+                    'customer_name' => $data['customer_name'],
+                    'customer_email' => $data['customer_email'],
+                    'idempotency_key' => $idempotencyKey,
+                    'idempotency_request_hash' => $requestHash,
+                    'status' => OrderStatus::Pending,
+                    'total' => '0.00',
                 ]);
 
-                $totalCents += $subtotalCents;
+                $totalCents = 0;
+
+                foreach ($data['items'] as $item) {
+                    $product = $products->get((int) $item['product_id']);
+                    $quantity = (int) $item['quantity'];
+                    $unitPrice = (string) $product->price;
+                    $subtotalCents = $this->toCents($unitPrice) * $quantity;
+
+                    $order->items()->create([
+                        'product_id' => $product->id,
+                        'quantity' => $quantity,
+                        'unit_price' => $unitPrice,
+                        'subtotal' => $this->fromCents($subtotalCents),
+                    ]);
+
+                    $totalCents += $subtotalCents;
+                }
+
+                foreach ($quantities as $productId => $quantity) {
+                    $products->get($productId)->decrement('stock', $quantity);
+                }
+
+                $order->update(['total' => $this->fromCents($totalCents)]);
+
+                ProcessOrder::dispatch($order->getKey())->afterCommit();
+
+                return $order;
+            }, attempts: 3);
+        } catch (QueryException $exception) {
+            if ($idempotencyKey === null || ! $this->isIdempotencyKeyViolation($exception)) {
+                throw $exception;
             }
 
-            foreach ($quantities as $productId => $quantity) {
-                $products->get($productId)->decrement('stock', $quantity);
+            $existingOrder = Order::query()
+                ->where('idempotency_key', $idempotencyKey)
+                ->first();
+
+            if ($existingOrder === null) {
+                throw $exception;
             }
 
-            $order->update(['total' => $this->fromCents($totalCents)]);
+            return $this->resolveIdempotentOrder($existingOrder, $requestHash);
+        }
 
-            ProcessOrder::dispatch($order->getKey())->afterCommit();
+        return $order->load('items.product');
+    }
 
-            return $order;
-        }, attempts: 3);
+    private function isIdempotencyKeyViolation(QueryException $exception): bool
+    {
+        $sqlState = $exception->errorInfo[0] ?? null;
+
+        return in_array($sqlState, ['23000', '23505'], true)
+            && str_contains(strtolower($exception->getMessage()), 'idempotency_key');
+    }
+
+    private function resolveIdempotentOrder(Order $order, ?string $requestHash): Order
+    {
+        if ($requestHash === null || ! hash_equals((string) $order->idempotency_request_hash, $requestHash)) {
+            throw new ConflictHttpException('This Idempotency-Key has already been used with a different request.');
+        }
 
         return $order->load('items.product');
     }

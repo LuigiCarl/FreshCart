@@ -15,6 +15,8 @@ class Order extends Model
         'order_number',
         'customer_name',
         'customer_email',
+        'idempotency_key',
+        'idempotency_request_hash',
         'status',
         'total',
         'invoice_path',

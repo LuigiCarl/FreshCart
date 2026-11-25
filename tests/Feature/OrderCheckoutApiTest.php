@@ -4,10 +4,13 @@ namespace Tests\Feature;
 
 use App\Enums\OrderStatus;
 use App\Jobs\ProcessOrder;
+use App\Mail\SendOrderConfirmation;
 use App\Models\Order;
 use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class OrderCheckoutApiTest extends TestCase
@@ -53,6 +56,58 @@ class OrderCheckoutApiTest extends TestCase
             'total' => '8.50',
             'status' => OrderStatus::Pending->value,
         ]);
+        Queue::assertPushed(ProcessOrder::class, 1);
+    }
+
+    public function test_repeating_an_idempotency_key_returns_the_existing_order_without_deducting_stock_again(): void
+    {
+        Queue::fake();
+        $product = Product::factory()->create(['stock' => 2]);
+        $payload = [
+            'customer_name' => 'Taylor Customer',
+            'customer_email' => 'taylor@example.com',
+            'items' => [
+                ['product_id' => $product->id, 'quantity' => 2],
+            ],
+        ];
+
+        $firstResponse = $this->postJson('/api/v1/orders', $payload, ['Idempotency-Key' => 'checkout-retry-001']);
+        $secondResponse = $this->postJson('/api/v1/orders', $payload, ['Idempotency-Key' => 'checkout-retry-001']);
+
+        $firstResponse->assertCreated();
+        $secondResponse->assertCreated()
+            ->assertJsonPath('data.order_number', $firstResponse->json('data.order_number'));
+
+        $this->assertDatabaseCount('orders', 1);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'stock' => 0]);
+        Queue::assertPushed(ProcessOrder::class, 1);
+    }
+
+    public function test_reusing_an_idempotency_key_with_a_different_payload_returns_conflict(): void
+    {
+        Queue::fake();
+        $product = Product::factory()->create(['stock' => 5]);
+
+        $this->postJson('/api/v1/orders', [
+            'customer_name' => 'Taylor Customer',
+            'customer_email' => 'taylor@example.com',
+            'items' => [
+                ['product_id' => $product->id, 'quantity' => 1],
+            ],
+        ], ['Idempotency-Key' => 'checkout-retry-002'])->assertCreated();
+
+        $this->postJson('/api/v1/orders', [
+            'customer_name' => 'Taylor Customer',
+            'customer_email' => 'taylor@example.com',
+            'items' => [
+                ['product_id' => $product->id, 'quantity' => 2],
+            ],
+        ], ['Idempotency-Key' => 'checkout-retry-002'])
+            ->assertStatus(409)
+            ->assertJsonPath('errors.idempotency_key.0', 'This Idempotency-Key has already been used with a different request.');
+
+        $this->assertDatabaseCount('orders', 1);
+        $this->assertDatabaseHas('products', ['id' => $product->id, 'stock' => 4]);
         Queue::assertPushed(ProcessOrder::class, 1);
     }
 
@@ -107,8 +162,8 @@ class OrderCheckoutApiTest extends TestCase
             'subtotal' => '3.50',
         ]);
 
-        \Illuminate\Support\Facades\Storage::fake('invoices');
-        \Illuminate\Support\Facades\Mail::fake();
+        Storage::fake('invoices');
+        Mail::fake();
 
         $job = new ProcessOrder($order->id);
         $job->handle();
@@ -118,8 +173,8 @@ class OrderCheckoutApiTest extends TestCase
         $this->assertSame(OrderStatus::Completed, $order->status);
         $this->assertSame('invoices/'.$order->order_number.'.txt', $order->invoice_path);
         $this->assertNotNull($order->processed_at);
-        $this->assertTrue(\Illuminate\Support\Facades\Storage::disk('invoices')->exists($order->order_number.'.txt'));
-        \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\SendOrderConfirmation::class, 1);
+        $this->assertTrue(Storage::disk('invoices')->exists($order->order_number.'.txt'));
+        Mail::assertQueued(SendOrderConfirmation::class, 1);
     }
 
     public function test_failed_processing_job_records_failure_reason(): void

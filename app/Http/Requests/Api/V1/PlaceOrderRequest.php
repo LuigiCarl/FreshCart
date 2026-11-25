@@ -6,6 +6,13 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class PlaceOrderRequest extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        $this->merge([
+            'idempotency_key' => $this->header('Idempotency-Key'),
+        ]);
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -22,6 +29,7 @@ class PlaceOrderRequest extends FormRequest
             'items' => ['required', 'array', 'min:1', 'max:20'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id'],
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
+            'idempotency_key' => ['nullable', 'string', 'min:1', 'max:255'],
         ];
     }
 }
