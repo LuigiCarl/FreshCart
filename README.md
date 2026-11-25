@@ -47,6 +47,14 @@ Run a worker in a separate terminal to process invoices and confirmation emails:
 php artisan queue:work database --tries=3
 ```
 
+The pending-order cleanup runs every minute. It cancels orders still pending after 30 minutes and restores stock atomically. Start Laravel's scheduler in another terminal for local development:
+
+```powershell
+php artisan schedule:work
+```
+
+You can run one cleanup pass manually with `php artisan orders:cleanup-pending`. Orders that have already started processing are left unchanged.
+
 Inspect or retry jobs that exhausted their attempts:
 
 ```powershell
@@ -141,6 +149,7 @@ Tests use an in-memory SQLite database. This keeps tests isolated from the confi
 - Stock is locked and checked in a transaction; insufficient stock rolls back the entire order.
 - Orders are created as `pending`. Invoice and email work is queued after checkout commits.
 - Only `pending` orders can be cancelled. Cancellation and stock restoration happen atomically.
+- The scheduled cleanup cancels only pending orders older than 30 minutes and uses the same atomic stock-restoration logic.
 - API validation, not-found, and server errors use JSON responses with `message` and `errors` fields.
 
 ## AI disclosure
