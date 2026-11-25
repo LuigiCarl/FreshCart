@@ -74,6 +74,10 @@ All endpoints are under `/api/v1` and return JSON.
 
 Optionally send an `Idempotency-Key` header with `POST /api/v1/orders`. Retrying the same request with the same key returns the existing order without decrementing stock or dispatching another processing job. Reusing the key with a different payload returns `409 Conflict`.
 
+### Checkout rate limit
+
+`POST /api/v1/orders` accepts up to 10 requests per minute per IP address. Requests over the limit receive a JSON `429 Too Many Requests` response.
+
 ### cURL examples (PowerShell)
 
 List products:
