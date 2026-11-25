@@ -145,6 +145,26 @@ class OrderCheckoutApiTest extends TestCase
             ->assertJsonValidationErrors(['customer_name', 'customer_email', 'items']);
     }
 
+    public function test_checkout_is_limited_to_ten_requests_per_minute_per_ip(): void
+    {
+        $payload = [
+            'customer_name' => '',
+            'customer_email' => 'not-an-email',
+            'items' => [],
+        ];
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->postJson('/api/v1/orders', $payload)
+                ->assertUnprocessable();
+        }
+
+        $response = $this->post('/api/v1/orders', $payload, ['Accept' => 'text/html']);
+
+        $response->assertStatus(429)
+            ->assertJsonStructure(['message']);
+        $this->assertStringContainsString('application/json', $response->headers->get('Content-Type'));
+    }
+
     public function test_processing_job_is_idempotent_and_queues_confirmation_email(): void
     {
         $product = Product::factory()->create(['name' => 'Pears']);
