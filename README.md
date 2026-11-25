@@ -23,7 +23,7 @@ A Laravel 12 API for placing and tracking grocery orders. Checkout reserves stoc
    php artisan key:generate
    ```
 
-3. Create a MySQL database named `freshcart`, then update `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` in `.env` if needed.
+3. Create a MySQL database named `freshcart`, then update `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` in `.env` if needed. Set `LOW_STOCK_ALERT_EMAIL` to the admin address that should receive inventory alerts.
 
 4. Run migrations and seed the sample user and products:
 
@@ -53,6 +53,8 @@ Inspect or retry jobs that exhausted their attempts:
 php artisan queue:failed
 php artisan queue:retry all
 ```
+
+When checkout takes a product from 5 or more units to fewer than 5, a low-stock email is queued once for that threshold crossing. Configure `LOW_STOCK_ALERT_EMAIL`; if it is empty, checkout still succeeds and Laravel logs a warning instead of queueing the alert.
 
 Order-processing failures set the order status to `failed` and record a reason. Email delivery is a separate queued job; if it fails, Laravel records it as a failed job while the already-processed order remains `completed`.
 
@@ -134,6 +136,7 @@ Tests use an in-memory SQLite database. This keeps tests isolated from the confi
 
 - Product listing and account registration/login are public; every order endpoint requires a Sanctum bearer token.
 - Orders are tied to the authenticated user and cannot be viewed or changed by other users.
+- Low-stock alerts are queued only when a checkout crosses from 5 or more units to fewer than 5.
 - Product prices come from the database, never from client-supplied prices.
 - Stock is locked and checked in a transaction; insufficient stock rolls back the entire order.
 - Orders are created as `pending`. Invoice and email work is queued after checkout commits.
