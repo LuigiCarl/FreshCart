@@ -13,14 +13,31 @@ class CancelOrderAction
 {
     public function execute(string $orderNumber, int $userId): Order
     {
-        return DB::transaction(function () use ($orderNumber, $userId): Order {
-            $order = Order::query()
-                ->where('user_id', $userId)
-                ->where('order_number', $orderNumber)
-                ->lockForUpdate()
-                ->firstOrFail();
+        return $this->cancel($orderNumber, $userId, false)
+            ?? throw new RuntimeException('User cancellation did not return an order.');
+    }
+
+    public function cancelIfPending(string $orderNumber): ?Order
+    {
+        return $this->cancel($orderNumber, null, true);
+    }
+
+    private function cancel(string $orderNumber, ?int $userId, bool $skipNonPending): ?Order
+    {
+        return DB::transaction(function () use ($orderNumber, $userId, $skipNonPending): ?Order {
+            $query = Order::query()->where('order_number', $orderNumber);
+
+            if ($userId !== null) {
+                $query->where('user_id', $userId);
+            }
+
+            $order = $query->lockForUpdate()->firstOrFail();
 
             if ($order->status !== OrderStatus::Pending) {
+                if ($skipNonPending) {
+                    return null;
+                }
+
                 throw ValidationException::withMessages([
                     'status' => 'Only pending orders can be cancelled.',
                 ]);
