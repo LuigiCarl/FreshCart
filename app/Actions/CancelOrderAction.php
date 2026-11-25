@@ -11,10 +11,11 @@ use RuntimeException;
 
 class CancelOrderAction
 {
-    public function execute(string $orderNumber): Order
+    public function execute(string $orderNumber, int $userId): Order
     {
-        return DB::transaction(function () use ($orderNumber): Order {
+        return DB::transaction(function () use ($orderNumber, $userId): Order {
             $order = Order::query()
+                ->where('user_id', $userId)
                 ->where('order_number', $orderNumber)
                 ->lockForUpdate()
                 ->firstOrFail();

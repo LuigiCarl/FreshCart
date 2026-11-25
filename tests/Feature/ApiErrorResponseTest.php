@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Sanctum;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -24,6 +26,8 @@ class ApiErrorResponseTest extends TestCase
 
     public function test_api_validation_error_uses_the_standard_json_shape(): void
     {
+        Sanctum::actingAs(User::factory()->create());
+
         $this->post('/api/v1/orders', [
             'customer_name' => '',
             'customer_email' => 'invalid',
