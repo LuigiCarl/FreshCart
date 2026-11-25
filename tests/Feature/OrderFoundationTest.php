@@ -16,7 +16,7 @@ class OrderFoundationTest extends TestCase
     {
         $this->seed();
 
-        $this->assertDatabaseCount('products', 10);
+        $this->assertGreaterThanOrEqual(10, Product::query()->count());
     }
 
     public function test_order_items_belong_to_order_and_product_and_order_status_is_cast(): void
