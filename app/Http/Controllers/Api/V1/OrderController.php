@@ -4,14 +4,18 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\CancelOrderAction;
 use App\Actions\PlaceOrderAction;
+use App\Actions\UploadOrderImageAction;
 use App\Enums\OrderStatus;
 use App\Http\Requests\Api\V1\PlaceOrderRequest;
+use App\Http\Requests\Api\V1\UploadOrderImageRequest;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OrderController
 {
@@ -65,5 +69,35 @@ class OrderController
         $order = $cancelOrder->execute($orderNumber, (int) $request->user()->getAuthIdentifier());
 
         return OrderResource::make($order)->response();
+    }
+
+    public function uploadImage(
+        UploadOrderImageRequest $request,
+        string $orderNumber,
+        UploadOrderImageAction $uploadOrderImage,
+    ): JsonResponse {
+        $order = $uploadOrderImage->execute(
+            $orderNumber,
+            (int) $request->user()->getAuthIdentifier(),
+            $request->file('image'),
+        );
+
+        return OrderResource::make($order)->response();
+    }
+
+    public function showImage(Request $request, string $orderNumber): StreamedResponse
+    {
+        $order = Order::query()
+            ->where('user_id', $request->user()->getAuthIdentifier())
+            ->where('order_number', $orderNumber)
+            ->firstOrFail();
+
+        $disk = Storage::disk('order_images');
+
+        if ($order->image_path === null || ! $disk->exists($order->image_path)) {
+            abort(404);
+        }
+
+        return $disk->response($order->image_path);
     }
 }
