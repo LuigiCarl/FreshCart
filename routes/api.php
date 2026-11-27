@@ -27,5 +27,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->name('orders.store');
         Route::get('/orders/{order_number}', [OrderController::class, 'show'])->name('orders.show');
         Route::post('/orders/{order_number}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
+        Route::post('/orders/{order_number}/image', [OrderController::class, 'uploadImage'])
+            ->middleware('throttle:10,1')
+            ->name('orders.image.store');
+        Route::get('/orders/{order_number}/image', [OrderController::class, 'showImage'])
+            ->name('orders.image.show');
     });
 });

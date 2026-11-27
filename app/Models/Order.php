@@ -22,8 +22,11 @@ class Order extends Model
         'status',
         'total',
         'invoice_path',
+        'image_path',
         'processed_at',
         'failure_reason',
+        'order_image',
+
     ];
 
     protected function casts(): array

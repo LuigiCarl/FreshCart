@@ -44,6 +44,12 @@ return [
             'throw' => true,
         ],
 
+        'order_images' => [
+            'driver' => 'local',
+            'root' => storage_path('app/order-images'),
+            'throw' => true,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
