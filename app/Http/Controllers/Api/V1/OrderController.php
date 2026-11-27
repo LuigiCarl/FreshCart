@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\CancelOrderAction;
 use App\Actions\PlaceOrderAction;
 use App\Actions\UploadOrderImageAction;
-use App\Enums\OrderStatus;
+use App\Http\Requests\Api\V1\ListOrdersRequest;
 use App\Http\Requests\Api\V1\PlaceOrderRequest;
 use App\Http\Requests\Api\V1\UploadOrderImageRequest;
 use App\Http\Resources\OrderResource;
@@ -14,17 +14,13 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OrderController
 {
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(ListOrdersRequest $request): AnonymousResourceCollection
     {
-        $filters = $request->validate([
-            'status' => ['sometimes', Rule::enum(OrderStatus::class)],
-            'customer_email' => ['sometimes', 'email', 'max:255'],
-        ]);
+        $filters = $request->validated();
 
         $orders = Order::query()
             ->where('user_id', $request->user()->getAuthIdentifier())

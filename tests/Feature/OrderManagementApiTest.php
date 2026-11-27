@@ -37,6 +37,13 @@ class OrderManagementApiTest extends TestCase
             ->assertJsonPath('meta.total', 1);
     }
 
+    public function test_order_listing_validates_status_and_email_filters(): void
+    {
+        $this->getJson('/api/v1/orders?status=invalid&customer_email=not-an-email')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['status', 'customer_email']);
+    }
+
     public function test_order_listing_is_paginated_fifteen_per_page(): void
     {
         for ($index = 0; $index < 16; $index++) {
