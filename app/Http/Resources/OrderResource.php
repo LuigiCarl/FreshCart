@@ -21,7 +21,7 @@ class OrderResource extends JsonResource
             'invoice_path' => $this->invoice_path,
             'image_path' => $this->image_path,
             'image_url' => $this->image_path !== null
-                ? route('api.v1.orders.image.show', ['order_number' => $this->order_number])
+                ? route('api.v1.orders.image.show', ['order' => $this->order_number])
                 : null,
             'processed_at' => $this->processed_at,
             'items' => OrderItemResource::collection($this->whenLoaded('items')),

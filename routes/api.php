@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\OrderController;
+use App\Http\Controllers\Api\V1\OrderImageController;
 use App\Http\Controllers\Api\V1\ProductController;
 use Illuminate\Support\Facades\Route;
 
@@ -27,10 +28,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             ->name('orders.store');
         Route::get('/orders/{order_number}', [OrderController::class, 'show'])->name('orders.show');
         Route::post('/orders/{order_number}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
-        Route::post('/orders/{order_number}/image', [OrderController::class, 'uploadImage'])
-            ->middleware('throttle:10,1')
+        Route::post('/orders/{order:order_number}/image', [OrderImageController::class, 'store'])
+            ->middleware(['throttle:order-images', 'can:uploadImage,order'])
             ->name('orders.image.store');
-        Route::get('/orders/{order_number}/image', [OrderController::class, 'showImage'])
+        Route::get('/orders/{order:order_number}/image', [OrderImageController::class, 'show'])
+            ->middleware('can:view,order')
             ->name('orders.image.show');
     });
 });

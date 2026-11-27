@@ -5,6 +5,7 @@ namespace App\Actions;
 use App\Models\Order;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -12,13 +13,8 @@ use Throwable;
 
 class UploadOrderImageAction
 {
-    public function execute(string $orderNumber, int $userId, UploadedFile $image): Order
+    public function execute(Order $order, UploadedFile $image): Order
     {
-        $order = Order::query()
-            ->where('user_id', $userId)
-            ->where('order_number', $orderNumber)
-            ->firstOrFail();
-
         $extension = $image->extension() ?: 'bin';
         $filename = sprintf('%s-%s.%s', $order->order_number, Str::lower((string) Str::ulid()), $extension);
         $disk = Storage::disk('order_images');
@@ -32,12 +28,10 @@ class UploadOrderImageAction
         $previousImagePath = null;
 
         try {
-            $updatedOrder = DB::transaction(function () use ($orderNumber, $userId, $storedPath, &$previousImagePath): Order {
+            $updatedOrder = DB::transaction(function () use ($order, $storedPath, &$previousImagePath): Order {
                 $lockedOrder = Order::query()
-                    ->where('user_id', $userId)
-                    ->where('order_number', $orderNumber)
                     ->lockForUpdate()
-                    ->firstOrFail();
+                    ->findOrFail($order->getKey());
 
                 $previousImagePath = $lockedOrder->image_path;
 
@@ -54,7 +48,15 @@ class UploadOrderImageAction
         }
 
         if (is_string($previousImagePath) && $previousImagePath !== '' && $previousImagePath !== $storedPath) {
-            $disk->delete($previousImagePath);
+            try {
+                $disk->delete($previousImagePath);
+            } catch (Throwable $exception) {
+                Log::warning('Unable to delete previous order image after replacement.', [
+                    'order_number' => $order->order_number,
+                    'previous_image_path' => $previousImagePath,
+                    'error' => $exception->getMessage(),
+                ]);
+            }
         }
 
         return $updatedOrder;

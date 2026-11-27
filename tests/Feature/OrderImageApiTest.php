@@ -52,7 +52,7 @@ class OrderImageApiTest extends TestCase
             ->assertJsonPath('data.order_number', $order->order_number)
             ->assertJsonPath(
                 'data.image_url',
-                route('api.v1.orders.image.show', ['order_number' => $order->order_number]),
+                route('api.v1.orders.image.show', ['order' => $order->order_number]),
             );
 
         $imagePath = $response->json('data.image_path');
@@ -65,9 +65,13 @@ class OrderImageApiTest extends TestCase
         ]);
         Storage::disk('order_images')->assertExists($imagePath);
 
-        $this->get('/api/v1/orders/'.$order->order_number.'/image')
+        $imageResponse = $this->get('/api/v1/orders/'.$order->order_number.'/image')
             ->assertOk()
             ->assertHeader('content-type', 'image/png');
+
+        $cacheControl = (string) $imageResponse->headers->get('Cache-Control');
+        $this->assertStringContainsString('private', $cacheControl);
+        $this->assertStringContainsString('no-store', $cacheControl);
     }
 
     public function test_replacing_order_image_deletes_the_previous_file(): void
@@ -146,6 +150,41 @@ class OrderImageApiTest extends TestCase
 
         $this->assertSame($imagePath, $order->fresh()->image_path);
         $this->assertCount(1, Storage::disk('order_images')->allFiles());
+    }
+
+    public function test_missing_image_field_or_missing_disk_file_returns_expected_errors(): void
+    {
+        Storage::fake('order_images');
+
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+        $order = $this->createOrder($user);
+
+        $this->postJson('/api/v1/orders/'.$order->order_number.'/image', [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['image']);
+
+        $order->update(['image_path' => 'missing-file.png']);
+
+        $this->getJson('/api/v1/orders/'.$order->order_number.'/image')
+            ->assertNotFound();
+    }
+
+    public function test_order_image_upload_is_rate_limited_to_ten_requests_per_minute(): void
+    {
+        Storage::fake('order_images');
+
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+        $order = $this->createOrder($user);
+
+        for ($attempt = 0; $attempt < 10; $attempt++) {
+            $this->postJson('/api/v1/orders/'.$order->order_number.'/image', [])
+                ->assertUnprocessable();
+        }
+
+        $this->postJson('/api/v1/orders/'.$order->order_number.'/image', [])
+            ->assertStatus(429);
     }
 
     private function createOrder(User $user): Order
