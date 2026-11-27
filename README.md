@@ -107,11 +107,11 @@ When checkout takes a product from 5 or more units to fewer than 5, a low-stock 
 
 Order-processing failures set the order status to `failed` and record a reason. Email delivery is a separate queued job; if it fails, Laravel records it as a failed job while the already-processed order remains `completed`.
 
-Invoices are written to `storage/app/invoices`.
+Invoices are written to `storage/app/invoices`. Uploaded order images are stored privately in `storage/app/order-images`.
 
 ## API endpoints
 
-All endpoints are under `/api/v1` and return JSON.
+All endpoints are under `/api/v1` and return JSON (except `GET /api/v1/orders/{order_number}/image`, which streams the stored image file).
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
@@ -123,10 +123,16 @@ All endpoints are under `/api/v1` and return JSON.
 | `GET` | `/api/v1/orders` | List your orders; optional `status` and `customer_email` filters (bearer token required) |
 | `GET` | `/api/v1/orders/{order_number}` | View your order details (bearer token required) |
 | `POST` | `/api/v1/orders/{order_number}/cancel` | Cancel your pending order (bearer token required) |
+| `POST` | `/api/v1/orders/{order_number}/image` | Upload or replace an image for your order (bearer token required) |
+| `GET` | `/api/v1/orders/{order_number}/image` | View the stored image for your order (bearer token required) |
 
 ### Customer authentication
 
-Product listing is public. Order endpoints require a Sanctum personal access token. Register with a name, email, password, and password confirmation, or log in with an existing account; both return a bearer token. Send it as `Authorization: Bearer <token>`. Logout revokes the current token. Customers can list, view, and cancel only their own orders. Legacy guest orders without an owner are not exposed through authenticated order endpoints.
+Product listing is public. Order endpoints require a Sanctum personal access token. Register with a name, email, password, and password confirmation, or log in with an existing account; both return a bearer token. Send it as `Authorization: Bearer <token>`. Logout revokes the current token. Customers can list, view, cancel, and upload/view images for only their own orders. Legacy guest orders without an owner are not exposed through authenticated order endpoints.
+
+### Order images
+
+Upload or replace an image on an existing order via `POST /api/v1/orders/{order_number}/image` using `multipart/form-data` with an `image` file field (`jpg`, `jpeg`, `png`, or `webp`, up to 2 MB, rate-limited to 10 requests per minute). Images are stored privately on the `order_images` disk (`storage/app/order-images`) and streamed only to the order's authenticated owner via `GET /api/v1/orders/{order_number}/image`. Replacing an order's image automatically deletes the previous file after the database update commits. The `orders.image_path` column is added via an additive nullable migration so existing orders remain intact with `image_path` and `image_url` set to `null`.
 
 ### Idempotent checkout
 
@@ -178,6 +184,13 @@ curl.exe -H "Accept: application/json" -H "Authorization: Bearer <token>" "http:
 curl.exe -X POST -H "Accept: application/json" -H "Authorization: Bearer <token>" "http://127.0.0.1:8000/api/v1/orders/{order_number}/cancel"
 ```
 
+Upload or view an image for an order:
+
+```powershell
+curl.exe -X POST -H "Accept: application/json" -H "Authorization: Bearer <token>" -F "image=@C:\path\to\receipt.png" "http://127.0.0.1:8000/api/v1/orders/{order_number}/image"
+curl.exe -H "Authorization: Bearer <token>" "http://127.0.0.1:8000/api/v1/orders/{order_number}/image" --output order-image.png
+```
+
 ## Tests
 
 Run the test suite with:
@@ -197,6 +210,7 @@ Tests use an in-memory SQLite database. This keeps tests isolated from the confi
 - Stock is locked and checked in a transaction; insufficient stock rolls back the entire order.
 - Orders are created as `pending`. Invoice and email work is queued after checkout commits.
 - Only `pending` orders can be cancelled. Cancellation and stock restoration happen atomically.
+- Order images are optional (`orders.image_path` is nullable), stored privately in `storage/app/order-images`, and accessible only to the order's authenticated owner.
 - The scheduled cleanup cancels only pending orders older than 30 minutes and uses the same atomic stock-restoration logic.
 - API validation, not-found, and server errors use JSON responses with `message` and `errors` fields.
 

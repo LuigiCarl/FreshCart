@@ -409,6 +409,84 @@
             },
             "description": "Cancels the order if it is still pending and restores stock atomically."
           }
+        },
+        {
+          "name": "Upload Order Image",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": "",
+                  "description": "Select a jpg, jpeg, png, or webp image file (max 2 MB)."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders/{{order_number}}/image",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "{{order_number}}",
+                "image"
+              ]
+            },
+            "description": "Uploads or replaces the private image attached to the authenticated customer's order."
+          }
+        },
+        {
+          "name": "View Order Image",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orders/{{order_number}}/image",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "{{order_number}}",
+                "image"
+              ]
+            },
+            "description": "Streams the private image attached to the authenticated customer's order."
+          }
         }
       ]
     }
