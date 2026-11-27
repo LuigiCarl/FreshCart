@@ -25,8 +25,6 @@ class Order extends Model
         'image_path',
         'processed_at',
         'failure_reason',
-        'order_image',
-
     ];
 
     protected function casts(): array

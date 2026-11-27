@@ -132,7 +132,7 @@ Product listing is public. Order endpoints require a Sanctum personal access tok
 
 ### Order images
 
-Upload or replace an image on an existing order via `POST /api/v1/orders/{order_number}/image` using `multipart/form-data` with an `image` file field (`jpg`, `jpeg`, `png`, or `webp`, up to 2 MB, rate-limited to 10 requests per minute). Images are stored privately on the `order_images` disk (`storage/app/order-images`) and streamed only to the order's authenticated owner via `GET /api/v1/orders/{order_number}/image`. Replacing an order's image automatically deletes the previous file after the database update commits. The `orders.image_path` column is added via an additive nullable migration so existing orders remain intact with `image_path` and `image_url` set to `null`.
+Upload or replace an image on an existing order via `POST /api/v1/orders/{order_number}/image` using `multipart/form-data` with an `image` file field (`jpg`, `jpeg`, `png`, or `webp`, up to 2 MB, rate-limited to 10 requests per minute per authenticated user). Images are stored privately on the `order_images` disk (`storage/app/order-images`) and streamed only to the order's authenticated owner via `GET /api/v1/orders/{order_number}/image` with `Cache-Control: private, no-store` (non-owners receive `404` via `OrderPolicy`). Replacing an order's image automatically deletes the previous file after the database update commits; if deleting the previous file fails, the error is logged without failing the committed update. The `orders.image_path` column is added via an additive nullable migration so existing orders remain intact with `image_path` and `image_url` set to `null`.
 
 ### Idempotent checkout
 

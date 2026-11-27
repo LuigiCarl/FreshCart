@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\V1;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rules\File;
 
 class UploadOrderImageRequest extends FormRequest
 {
@@ -12,12 +13,15 @@ class UploadOrderImageRequest extends FormRequest
     }
 
     /**
-     * @return array<string, array<int, string>>
+     * @return array<string, array<int, mixed>>
      */
     public function rules(): array
     {
         return [
-            'image' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'image' => [
+                'required',
+                File::image()->types(['jpg', 'jpeg', 'png', 'webp'])->max('2mb'),
+            ],
         ];
     }
 }
