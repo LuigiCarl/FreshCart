@@ -2,6 +2,8 @@
 
 namespace App\Http\Requests\Api\V1;
 
+use App\Data\OrderItemData;
+use App\Data\PlaceOrderData;
 use Illuminate\Foundation\Http\FormRequest;
 
 class PlaceOrderRequest extends FormRequest
@@ -31,5 +33,23 @@ class PlaceOrderRequest extends FormRequest
             'items.*.quantity' => ['required', 'integer', 'min:1', 'max:50'],
             'idempotency_key' => ['nullable', 'string', 'min:1', 'max:255'],
         ];
+    }
+
+    public function toDto(): PlaceOrderData
+    {
+        $validated = $this->validated();
+
+        return new PlaceOrderData(
+            customerName: $validated['customer_name'],
+            customerEmail: $validated['customer_email'],
+            items: array_values(array_map(
+                fn (array $item): OrderItemData => new OrderItemData(
+                    productId: (int) $item['product_id'],
+                    quantity: (int) $item['quantity'],
+                ),
+                $validated['items'],
+            )),
+            idempotencyKey: $validated['idempotency_key'] ?? null,
+        );
     }
 }

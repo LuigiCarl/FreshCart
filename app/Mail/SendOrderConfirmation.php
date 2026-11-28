@@ -25,6 +25,8 @@ class SendOrderConfirmation extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
+        $this->order->loadMissing('items.product');
+
         return new Content(
             view: 'emails.orders.confirmation',
         );

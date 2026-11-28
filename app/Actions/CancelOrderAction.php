@@ -11,29 +11,25 @@ use RuntimeException;
 
 class CancelOrderAction
 {
-    public function execute(string $orderNumber, int $userId): Order
+    public function execute(Order $order): Order
     {
-        return $this->cancel($orderNumber, $userId, false)
+        return $this->cancel($order->getKey(), skipNonPending: false)
             ?? throw new RuntimeException('User cancellation did not return an order.');
     }
 
-    public function cancelIfPending(string $orderNumber): ?Order
+    public function cancelIfPending(Order $order): ?Order
     {
-        return $this->cancel($orderNumber, null, true);
+        return $this->cancel($order->getKey(), skipNonPending: true);
     }
 
-    private function cancel(string $orderNumber, ?int $userId, bool $skipNonPending): ?Order
+    private function cancel(int $orderId, bool $skipNonPending): ?Order
     {
-        return DB::transaction(function () use ($orderNumber, $userId, $skipNonPending): ?Order {
-            $query = Order::query()->where('order_number', $orderNumber);
+        return DB::transaction(function () use ($orderId, $skipNonPending): ?Order {
+            $order = Order::query()
+                ->lockForUpdate()
+                ->findOrFail($orderId);
 
-            if ($userId !== null) {
-                $query->where('user_id', $userId);
-            }
-
-            $order = $query->lockForUpdate()->firstOrFail();
-
-            if ($order->status !== OrderStatus::Pending) {
+            if (! $order->status->canBeCancelled()) {
                 if ($skipNonPending) {
                     return null;
                 }
@@ -43,10 +39,9 @@ class CancelOrderAction
                 ]);
             }
 
-            $items = $order->items()->orderBy('product_id')->orderBy('id')->get();
             $quantities = [];
 
-            foreach ($items as $item) {
+            foreach ($order->items()->orderBy('product_id')->orderBy('id')->get() as $item) {
                 $quantities[$item->product_id] = ($quantities[$item->product_id] ?? 0) + $item->quantity;
             }
 
@@ -61,7 +56,7 @@ class CancelOrderAction
                 $product = $products->get($productId);
 
                 if ($product === null) {
-                    throw new RuntimeException("Product {$productId} for order {$orderNumber} no longer exists.");
+                    throw new RuntimeException("Product {$productId} for order {$order->order_number} no longer exists.");
                 }
 
                 $product->increment('stock', $quantity);

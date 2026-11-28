@@ -10,10 +10,14 @@ class OrderPolicy
 {
     public function view(User $user, Order $order): Response
     {
-        return $order->user_id !== null
-            && (int) $order->user_id === (int) $user->getAuthIdentifier()
+        return $order->isOwnedBy($user)
             ? Response::allow()
             : Response::denyAsNotFound();
+    }
+
+    public function cancel(User $user, Order $order): Response
+    {
+        return $this->view($user, $order);
     }
 
     public function uploadImage(User $user, Order $order): Response

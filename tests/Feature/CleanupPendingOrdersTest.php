@@ -50,7 +50,7 @@ class CleanupPendingOrdersTest extends TestCase
         $product = Product::factory()->create(['stock' => 2]);
         $order = $this->createOrder($user, $product, OrderStatus::Processing, now()->subMinutes(45), 3);
 
-        $result = app(CancelOrderAction::class)->cancelIfPending($order->order_number);
+        $result = app(CancelOrderAction::class)->cancelIfPending($order);
 
         $this->assertNull($result);
         $this->assertDatabaseHas('orders', [
