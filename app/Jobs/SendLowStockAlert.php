@@ -8,7 +8,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Throwable;
 
 class SendLowStockAlert implements ShouldQueue
 {
@@ -35,5 +37,16 @@ class SendLowStockAlert implements ShouldQueue
             $this->productName,
             $this->remainingStock,
         ));
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        Log::error('Failed to send low-stock alert email.', [
+            'product_id' => $this->productId,
+            'product_name' => $this->productName,
+            'remaining_stock' => $this->remainingStock,
+            'recipient' => $this->recipient,
+            'error' => $exception?->getMessage(),
+        ]);
     }
 }

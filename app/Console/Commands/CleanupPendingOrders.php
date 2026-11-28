@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Actions\CancelOrderAction;
-use App\Enums\OrderStatus;
 use App\Models\Order;
 use Illuminate\Console\Command;
 
@@ -19,12 +18,11 @@ class CleanupPendingOrders extends Command
         $cancelledCount = 0;
 
         Order::query()
-            ->where('status', OrderStatus::Pending->value)
-            ->where('created_at', '<=', $cutoff)
+            ->pendingOlderThan($cutoff)
             ->orderBy('id')
             ->chunkById(100, function ($orders) use ($cancelOrder, &$cancelledCount): void {
                 foreach ($orders as $order) {
-                    if ($cancelOrder->cancelIfPending($order->order_number) !== null) {
+                    if ($cancelOrder->cancelIfPending($order) !== null) {
                         $cancelledCount++;
                     }
                 }

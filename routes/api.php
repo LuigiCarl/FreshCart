@@ -11,10 +11,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
     Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('/register', [AuthController::class, 'register'])
-            ->middleware('throttle:10,1')
+            ->middleware('throttle:auth')
             ->name('register');
         Route::post('/login', [AuthController::class, 'login'])
-            ->middleware('throttle:10,1')
+            ->middleware('throttle:auth')
             ->name('login');
         Route::post('/logout', [AuthController::class, 'logout'])
             ->middleware('auth:sanctum')
@@ -24,10 +24,14 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
         Route::post('/orders', [OrderController::class, 'store'])
-            ->middleware('throttle:10,1')
+            ->middleware('throttle:checkout')
             ->name('orders.store');
-        Route::get('/orders/{order_number}', [OrderController::class, 'show'])->name('orders.show');
-        Route::post('/orders/{order_number}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
+        Route::get('/orders/{order:order_number}', [OrderController::class, 'show'])
+            ->middleware('can:view,order')
+            ->name('orders.show');
+        Route::post('/orders/{order:order_number}/cancel', [OrderController::class, 'cancel'])
+            ->middleware('can:cancel,order')
+            ->name('orders.cancel');
         Route::post('/orders/{order:order_number}/image', [OrderImageController::class, 'store'])
             ->middleware(['throttle:order-images', 'can:uploadImage,order'])
             ->name('orders.image.store');
